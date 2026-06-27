@@ -30,6 +30,7 @@ from aiogram.types import (
 
 import keyboards as kb
 import storage
+import vpn
 from config import config
 from plans import PLANS
 
@@ -79,7 +80,15 @@ async def on_successful_payment(message: Message):
         await message.answer("Оплата получена, но тариф не распознан. Напиши в поддержку.")
         return
 
-    sub = storage.add_subscription(message.from_user.id, plan_key, plan)
+    # Деньги уже списаны — если выдача ключа упадёт, обязательно сообщаем.
+    try:
+        sub = await vpn.issue_subscription(message.from_user.id, plan_key, plan)
+    except Exception:
+        await message.answer(
+            "⚠️ Оплата прошла, но не удалось создать ключ автоматически.\n"
+            "Напиши в поддержку @fayzee142 — выдадим вручную.",
+        )
+        return
 
     # provider_payment_charge_id — номер транзакции у провайдера, полезно сохранить
     charge_id = sp.provider_payment_charge_id
@@ -89,7 +98,7 @@ async def on_successful_payment(message: Message):
         f"Тариф: <b>{plan['title']}</b>\n"
         f"Действует до: {_fmt_date(sub['expires_at'])}\n"
         f"Способ оплаты: СБП / карта\n\n"
-        "Твой ключ:\n"
+        "Твой ключ (вставь в приложение VLESS):\n"
         f"<code>{sub['config']}</code>\n\n"
         f"<i>Чек № {charge_id}</i>",
         reply_markup=kb.back_to_main(),

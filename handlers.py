@@ -7,6 +7,7 @@ from aiogram.types import Message, CallbackQuery
 import keyboards as kb
 import storage
 import payments
+import vpn
 from config import config
 from plans import PLANS
 
@@ -19,8 +20,9 @@ def _fmt_date(ts: int) -> str:
 
 HELP_TEXT = (
     "❓ <b>Помощь</b>\n\n"
-    "После оплаты бот выдаёт ключ-конфиг.\n"
-    "Вопросы — пиши в поддержку: @your_support"
+    "После оплаты бот сразу выдаёт ключ — вставь его в приложение VLESS "
+    "(v2rayNG на Android, Streisand на iOS).\n\n"
+    "Остались вопросы? Напиши в поддержку: @fayzee142"
 )
 
 
@@ -62,7 +64,7 @@ async def cmd_subs(message: Message):
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
-    await message.answer(HELP_TEXT, reply_markup=kb.back_to_main())
+    await message.answer(HELP_TEXT, reply_markup=kb.help_menu())
 
 
 # ---------- Нажатия на кнопки быстрого доступа (под чатом) ----------
@@ -79,7 +81,7 @@ async def btn_subs(message: Message):
 
 @router.message(F.text == kb.BTN_HELP)
 async def btn_help(message: Message):
-    await message.answer(HELP_TEXT, reply_markup=kb.back_to_main())
+    await message.answer(HELP_TEXT, reply_markup=kb.help_menu())
 
 
 @router.message(Command("admin"))
@@ -119,12 +121,7 @@ async def show_plans(call: CallbackQuery):
 
 @router.callback_query(F.data == "menu:help")
 async def show_help(call: CallbackQuery):
-    await call.message.edit_text(
-        "❓ <b>Помощь</b>\n\n"
-        "После оплаты бот выдаёт ключ-конфиг.\n"
-        "Вопросы — пиши в поддержку: @your_support",
-        reply_markup=kb.back_to_main(),
-    )
+    await call.message.edit_text(HELP_TEXT, reply_markup=kb.help_menu())
     await call.answer()
 
 
@@ -188,13 +185,23 @@ async def process_payment(call: CallbackQuery):
         await call.answer()
         return
 
-    # Иначе — тестовая заглушка, чтобы бот работал без провайдера.
-    sub = storage.add_subscription(call.from_user.id, plan_key, plan)
+    # Иначе — оплата не подключена: сразу выдаём ключ.
+    # Если настроена панель (XUI_HOST) — ключ будет настоящим, иначе тестовым.
+    try:
+        sub = await vpn.issue_subscription(call.from_user.id, plan_key, plan)
+    except Exception as e:
+        await call.message.edit_text(
+            "⚠️ Не удалось создать ключ. Попробуй позже или напиши в поддержку.",
+            reply_markup=kb.back_to_main(),
+        )
+        await call.answer()
+        return
+
     await call.message.edit_text(
-        "✅ <b>Оплата прошла (тест)!</b>\n\n"
+        "✅ <b>Готово!</b>\n\n"
         f"Тариф: <b>{plan['title']}</b>\n"
         f"Действует до: {_fmt_date(sub['expires_at'])}\n\n"
-        "Твой ключ:\n"
+        "Твой ключ (вставь в приложение VLESS):\n"
         f"<code>{sub['config']}</code>",
         reply_markup=kb.back_to_main(),
     )

@@ -60,3 +60,15 @@ def back_to_main() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="⬅️ В меню", callback_data="menu:main")
     return kb.as_markup()
+
+
+# Контакт поддержки
+SUPPORT_USERNAME = "fayzee142"
+
+
+def help_menu() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✍️ Написать в поддержку", url=f"https://t.me/{SUPPORT_USERNAME}")
+    kb.button(text="⬅️ В меню", callback_data="menu:main")
+    kb.adjust(1)
+    return kb.as_markup()
