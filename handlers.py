@@ -6,6 +6,7 @@ from aiogram.types import Message, CallbackQuery
 
 import keyboards as kb
 import storage
+import payments
 from config import config
 from plans import PLANS
 
@@ -16,6 +17,26 @@ def _fmt_date(ts: int) -> str:
     return time.strftime("%d.%m.%Y", time.localtime(ts))
 
 
+HELP_TEXT = (
+    "❓ <b>Помощь</b>\n\n"
+    "После оплаты бот выдаёт ключ-конфиг.\n"
+    "Вопросы — пиши в поддержку: @your_support"
+)
+
+
+def _subs_text(user_id: int) -> str:
+    subs = storage.get_subscriptions(user_id)
+    if not subs:
+        return "🔑 У тебя пока нет подписок.\n\nКупи VPN в меню."
+    text = "🔑 <b>Твои подписки:</b>\n\n"
+    for s in subs:
+        text += (
+            f"• <b>{s['title']}</b> (до {_fmt_date(s['expires_at'])})\n"
+            f"<code>{s['config']}</code>\n\n"
+        )
+    return text
+
+
 # ---------- Команды ----------
 
 @router.message(CommandStart())
@@ -23,9 +44,42 @@ async def cmd_start(message: Message):
     await message.answer(
         "👋 <b>Привет!</b>\n\n"
         "Это бот для покупки VPN.\n"
-        "Выбери действие в меню ниже.",
-        reply_markup=kb.main_menu(),
+        "Выбери действие в меню ниже или кнопками под чатом.",
+        reply_markup=kb.reply_main(),   # кнопки быстрого доступа под чатом
     )
+    await message.answer("Главное меню:", reply_markup=kb.main_menu())
+
+
+@router.message(Command("buy"))
+async def cmd_buy(message: Message):
+    await message.answer("🛒 <b>Выбери тариф:</b>", reply_markup=kb.plans_menu())
+
+
+@router.message(Command("subs"))
+async def cmd_subs(message: Message):
+    await message.answer(_subs_text(message.from_user.id), reply_markup=kb.back_to_main())
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    await message.answer(HELP_TEXT, reply_markup=kb.back_to_main())
+
+
+# ---------- Нажатия на кнопки быстрого доступа (под чатом) ----------
+
+@router.message(F.text == kb.BTN_BUY)
+async def btn_buy(message: Message):
+    await message.answer("🛒 <b>Выбери тариф:</b>", reply_markup=kb.plans_menu())
+
+
+@router.message(F.text == kb.BTN_SUBS)
+async def btn_subs(message: Message):
+    await message.answer(_subs_text(message.from_user.id), reply_markup=kb.back_to_main())
+
+
+@router.message(F.text == kb.BTN_HELP)
+async def btn_help(message: Message):
+    await message.answer(HELP_TEXT, reply_markup=kb.back_to_main())
 
 
 @router.message(Command("admin"))
@@ -110,7 +164,8 @@ async def show_plan_detail(call: CallbackQuery):
         f"Срок: {plan['days']} дней\n"
         f"Цена: <b>{plan['price']} ₽</b>\n\n"
         + ("🧪 <i>Тестовый режим: оплата эмулируется.</i>"
-           if config.test_mode else "Нажми «Оплатить» для перехода к оплате."),
+           if not config.provider_token
+           else "Нажми «Оплатить» — доступна оплата картой и по СБП."),
         reply_markup=kb.plan_detail_menu(plan_key),
     )
     await call.answer()
@@ -126,27 +181,21 @@ async def process_payment(call: CallbackQuery):
         await call.answer("Тариф не найден", show_alert=True)
         return
 
-    if config.test_mode:
-        # === ТЕСТ: эмулируем успешную оплату ===
-        sub = storage.add_subscription(call.from_user.id, plan_key, plan)
-        await call.message.edit_text(
-            "✅ <b>Оплата прошла (тест)!</b>\n\n"
-            f"Тариф: <b>{plan['title']}</b>\n"
-            f"Действует до: {_fmt_date(sub['expires_at'])}\n\n"
-            "Твой ключ:\n"
-            f"<code>{sub['config']}</code>",
-            reply_markup=kb.back_to_main(),
-        )
-        await call.answer("Готово ✅")
-    else:
-        # === ПРОДАКШЕН ===
-        # Здесь подключи реальную оплату:
-        #  - Telegram Payments (bot.send_invoice / provider_token)
-        #  - YooKassa, CryptoBot, и т.п.
-        # После подтверждения оплаты вызови storage.add_subscription(...)
-        await call.message.edit_text(
-            "💳 Здесь будет реальная оплата.\n"
-            "Подключи платёжный провайдер в handlers.py.",
-            reply_markup=kb.back_to_main(),
-        )
+    # Если подключён провайдер (ЮKassa) — отправляем реальный счёт.
+    # В окне оплаты появится выбор: карта / СБП / QR (если СБП включён в кабинете).
+    if config.provider_token:
+        await payments.send_plan_invoice(call.message, plan_key, plan)
         await call.answer()
+        return
+
+    # Иначе — тестовая заглушка, чтобы бот работал без провайдера.
+    sub = storage.add_subscription(call.from_user.id, plan_key, plan)
+    await call.message.edit_text(
+        "✅ <b>Оплата прошла (тест)!</b>\n\n"
+        f"Тариф: <b>{plan['title']}</b>\n"
+        f"Действует до: {_fmt_date(sub['expires_at'])}\n\n"
+        "Твой ключ:\n"
+        f"<code>{sub['config']}</code>",
+        reply_markup=kb.back_to_main(),
+    )
+    await call.answer("Готово ✅")

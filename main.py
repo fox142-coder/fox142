@@ -5,12 +5,24 @@ import sys
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
 
 from config import config
 from handlers import router
+from payments import payments_router
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
+
+
+async def set_commands(bot: Bot):
+    """Меню команд рядом с полем ввода (кнопка «Меню» в Telegram)."""
+    await bot.set_my_commands([
+        BotCommand(command="start", description="🏠 Запустить бота"),
+        BotCommand(command="buy", description="🛒 Купить VPN"),
+        BotCommand(command="subs", description="🔑 Мои подписки"),
+        BotCommand(command="help", description="❓ Помощь"),
+    ])
 
 
 def build_bot() -> Bot:
@@ -31,7 +43,9 @@ async def run_polling():
     bot = build_bot()
     dp = Dispatcher()
     dp.include_router(router)
+    dp.include_router(payments_router)
 
+    await set_commands(bot)
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Бот запущен в режиме polling. Открой его в Telegram и напиши /start")
     await dp.start_polling(bot)
@@ -46,8 +60,10 @@ def run_webhook():
     bot = build_bot()
     dp = Dispatcher()
     dp.include_router(router)
+    dp.include_router(payments_router)
 
     async def on_startup(app: web.Application):
+        await set_commands(bot)
         await bot.set_webhook(
             url=config.webhook_url,
             secret_token=config.webhook_secret,

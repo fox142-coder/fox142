@@ -29,6 +29,12 @@ class Config:
     # Тестовый режим: оплата эмулируется, реальные деньги не списываются
     test_mode: bool = os.getenv("TEST_MODE", "true").lower() == "true"
 
+    # --- Оплата (СБП / карты через провайдера, напр. ЮKassa) ---
+    # Получается в @BotFather: бот -> Payments -> Connect ЮKassa.
+    # Если пусто -> используется тестовая заглушка (бот всё равно работает).
+    provider_token: str = os.getenv("PROVIDER_TOKEN", "")
+    currency: str = os.getenv("CURRENCY", "RUB")
+
     # --- Режим работы ---
     # false -> long polling (домен НЕ нужен, удобно для теста)
     # true  -> webhook (нужен свой домен + SSL)

@@ -1,7 +1,30 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from plans import PLANS
+
+
+# Тексты кнопок быстрого доступа (под чатом). Используются и в keyboards, и в handlers.
+BTN_BUY = "🛒 Купить VPN"
+BTN_SUBS = "🔑 Мои подписки"
+BTN_HELP = "❓ Помощь"
+
+
+def reply_main() -> ReplyKeyboardMarkup:
+    """Постоянные кнопки внизу под полем ввода — быстрый доступ к командам."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_BUY)],
+            [KeyboardButton(text=BTN_SUBS), KeyboardButton(text=BTN_HELP)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выбери действие…",
+    )
 
 
 def main_menu() -> InlineKeyboardMarkup:
